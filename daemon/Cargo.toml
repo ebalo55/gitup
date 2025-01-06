@@ -7,7 +7,14 @@ rust-version.workspace = true
 readme.workspace = true
 
 [dependencies]
-clap = {version = "4.5.23", features = ["derive"]}
+clap = { version = "4.5.23", features = ["derive"] }
+reqwest = { version = "0.12.12", features = ["json", "multipart"] }
+tokio = { version = "1.42.0", features = ["full"] }
+tracing = { version = "0.1.41" }
+tracing-subscriber = { version = "0.3.19" }
+serde = { version = "1.0.217", features = ["derive"] }
+serde_json = { version = "1.0.134" }
+optional_struct = { version = "0.5.2" }
 
 [lints]
 workspace = true

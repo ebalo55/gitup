@@ -1,0 +1,15 @@
+{
+  "operational_mode": "full",
+  "folder_branching": false,
+  "split": true,
+  "split_size": 25,
+  "split_unit": "megabytes",
+  "multipart": true,
+  "paths": [
+    "./daemon/src/main.rs",
+    "./gui/"
+  ],
+  "debug": true,
+  "pat": "github_pat_...",
+  "repository_url": "https://github.com/..."
+}

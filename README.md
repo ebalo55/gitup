@@ -56,8 +56,8 @@ Gitup offers advanced configuration options to tailor your backup strategy to yo
 
 ### Prerequisites
 
-- Git installed on your system.
 - A GitHub or GitLab account with access to create repositories.
+- An access token with the "Content" (read-write) permission, which you can generate in your account settings.
 
 ### Installation
 
