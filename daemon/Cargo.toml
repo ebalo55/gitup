@@ -1,0 +1,13 @@
+[package]
+name = "daemon"
+authors.workspace = true
+edition.workspace = true
+version.workspace = true
+rust-version.workspace = true
+readme.workspace = true
+
+[dependencies]
+clap = {version = "4.5.23", features = ["derive"]}
+
+[lints]
+workspace = true
