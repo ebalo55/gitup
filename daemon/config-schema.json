@@ -1,0 +1,79 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Gitup Configuration Schema",
+  "type": "object",
+  "properties": {
+    "operational_mode": {
+      "type": "string",
+      "enum": ["full", "incremental"],
+      "description": "Defines how the backup should be executed."
+    },
+    "folder_branching": {
+      "type": "boolean",
+      "description": "Backup each folder in a separate branch for independent versioning."
+    },
+    "split": {
+      "type": "boolean",
+      "description": "Automatically split files that exceed a predefined size."
+    },
+    "split_size": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 25,
+      "description": "Size threshold (in split_unit) for splitting files. Required if 'split' is true."
+    },
+    "split_unit": {
+      "type": "string",
+      "enum": ["kilobytes", "megabytes", "gigabytes"],
+      "default": "megabytes",
+      "description": "Unit of measurement for split size. Required if 'split' is true."
+    },
+    "multipart": {
+      "type": "boolean",
+      "description": "Record each file independently for granular backup and recovery."
+    },
+    "paths": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of paths (files or folders) to back up. Folders are processed recursively."
+    },
+    "debug": {
+      "type": "boolean",
+      "description": "Enable debug logging."
+    },
+    "compress": {
+      "type": "boolean",
+      "description": "Compress the backup before uploading."
+    },
+    "encrypt": {
+      "type": "boolean",
+      "description": "Encrypt the backup before uploading."
+    },
+    "key": {
+      "type": "string",
+      "description": "Encryption key to use, required if 'encrypt' is true."
+    },
+    "providers": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of storage providers in 'gitup://<auth-token>:<provider-name>/<fragments>' format."
+    }
+  },
+  "required": ["paths", "providers"],
+  "dependencies": {
+    "split": {
+      "properties": {
+        "split_size": { "type": "integer" },
+        "split_unit": { "type": "string" }
+      },
+      "required": ["split_size", "split_unit"]
+    },
+    "encrypt": {
+      "properties": {
+        "key": { "type": "string" }
+      },
+      "required": ["key"]
+    }
+  },
+  "additionalProperties": false
+}
