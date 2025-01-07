@@ -24,7 +24,7 @@ struct Repository {
     /// The owner of the repository
     owner: String,
     /// The name of the repository
-    name: String,
+    name:  String,
 }
 impl TryFrom<String> for Repository {
     type Error = RequestError;
@@ -34,7 +34,7 @@ impl TryFrom<String> for Repository {
         if value.contains("github.com") {
             let value = value.trim_end_matches(".git");
             let path_start = value.find("github.com/").unwrap() + "github.com/".len();
-            let value = &value[path_start..];
+            let value = &value[path_start ..];
             let parts = value.split('/').collect::<Vec<&str>>();
 
             if parts.len() != 2 {
@@ -43,9 +43,10 @@ impl TryFrom<String> for Repository {
 
             return Ok(Self {
                 owner: parts[0].to_owned(),
-                name: parts[1].to_owned(),
+                name:  parts[1].to_owned(),
             });
-        } else if value.contains("gitlab.com") {
+        }
+        else if value.contains("gitlab.com") {
             todo!("GitLab support is not implemented yet")
         }
 
@@ -72,9 +73,9 @@ pub enum RequestError {
 #[derive(Debug, Deserialize)]
 pub struct UsefulMetadata {
     /// Whether the repository is archived
-    pub archived: bool,
+    pub archived:   bool,
     /// Whether the repository is disabled
-    pub disabled: bool,
+    pub disabled:   bool,
     /// The repository visibility
     pub visibility: String,
 }
@@ -89,10 +90,12 @@ pub fn make_request(
     let repository = Repository::try_from(repository_url.to_owned())?;
 
     let req = match endpoint {
-        RequestEndpoint::Meta => client.get(format!(
-            "https://api.github.com/repos/{}/{}",
-            repository.owner, repository.name
-        )),
+        RequestEndpoint::Meta => {
+            client.get(format!(
+                "https://api.github.com/repos/{}/{}",
+                repository.owner, repository.name
+            ))
+        },
     };
 
     Ok(prepare_github_request(req, pat))
