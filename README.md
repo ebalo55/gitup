@@ -93,7 +93,7 @@ We welcome contributions from the community to enhance Gitup! If you'd like to c
 
 ## License
 
-Gitup is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See the `LICENSE` file
+Gitup is licensed under the [GPL 2.0](https://github.com/ebalo55/gitup/blob/master/LICENSE). See the `LICENSE` file
 for more details.
 
 ## Support
