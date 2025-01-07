@@ -5,8 +5,6 @@ various providers, including GitHub, GitLab, TeraBox, MEGA.nz, Google Drive, and
 graphical interface (GUI) and a robust command-line daemon, Gitup enables secure, efficient, and customizable backups to
 help you manage your data effectively.
 
----
-
 ## Key Features
 
 ### 1. **Optimized Storage Management**
@@ -43,8 +41,6 @@ Gitup offers advanced configuration options to tailor your backup strategy to yo
 - **Command-Line Daemon**: A lightweight and efficient background process that executes backups without requiring manual
   intervention.
 
----
-
 ## Disclaimer on Usage
 
 **Important:** While Gitup supports various storage providers, including GitHub and GitLab, it is your responsibility to
@@ -52,8 +48,6 @@ ensure compliance with their terms of service. Many platforms prohibit using the
 general-purpose storage solutions. Gitup is designed to assist with fair and optimized usage within these constraints.
 Misuse of this tool may result in the suspension or termination of your account by the provider. Always review the
 acceptable use policies of your chosen storage platforms before proceeding.
-
----
 
 ## Why Choose Gitup?
 
@@ -64,8 +58,6 @@ acceptable use policies of your chosen storage platforms before proceeding.
 - **Customizable**: Highly configurable to adapt to various use cases and storage requirements.
 - **Efficient**: Intelligent backup mechanisms minimize resource usage while maximizing storage potential.
 
----
-
 ## Getting Started
 
 ### Prerequisites
@@ -75,7 +67,7 @@ acceptable use policies of your chosen storage platforms before proceeding.
 
 ### Installation
 
-1. Download and run the installer. You can find it on the [releases page]().
+1. Download and run the installer. You can find it on the [releases page](https://github.com/ebalo55/gitup/releases).
 
 ### Configuration
 
@@ -86,8 +78,6 @@ acceptable use policies of your chosen storage platforms before proceeding.
    ```bash
    gitup-daemon start
    ```
-
----
 
 ## Contribution
 
@@ -101,21 +91,18 @@ We welcome contributions from the community to enhance Gitup! If you'd like to c
 3. Commit your changes and push to your branch.
 4. Submit a pull request.
 
----
-
 ## License
 
 Gitup is licensed under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). See the `LICENSE` file
 for more details.
-
----
 
 ## Support
 
 If you encounter issues or have questions, feel free to open an issue on GitHub or reach out to the community via the
 discussions board.
 
----
+If you like Gitup, please consider giving us a ⭐star on GitHub
+and [sponsoring the project](https://github.com/sponsors/ebalo55) to support its development.
 
 ## Roadmap
 
