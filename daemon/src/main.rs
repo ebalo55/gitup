@@ -1,18 +1,31 @@
+mod backup;
+mod base64;
+mod byte_size;
 mod configuration;
 mod storage_providers;
-mod web_client;
 
-use std::{fs, path::PathBuf};
+use std::{collections::HashMap, fs, io, mem, path::PathBuf, sync::Arc};
 
 use clap::{Parser, ValueEnum};
 use optional_struct::{optional_struct, Applicable};
 use serde::{Deserialize, Serialize};
+use tokio::sync::{Mutex, RwLock};
 use tracing::{debug, error, field::debug, info, warn, Level};
-use tracing_subscriber::layer::SubscriberExt;
+use tracing_subscriber::{
+    fmt::{
+        layer,
+        writer::{BoxMakeWriter, MakeWriterExt},
+    },
+    layer,
+    layer::SubscriberExt,
+    util::SubscriberInitExt,
+    Registry,
+};
 
 use crate::{
-    configuration::{Args, OptionalArgs},
-    web_client::{make_request, RequestEndpoint, UsefulMetadata},
+    backup::backup,
+    configuration::{merge_configuration_file, Args, OptionalArgs},
+    storage_providers::provider::StorageProvider,
 };
 
 #[tokio::main]
@@ -20,130 +33,85 @@ async fn main() -> Result<(), String> {
     let args = Args::parse();
 
     // Setup tracing
-    tracing::subscriber::set_global_default(
-        tracing_subscriber::fmt()
-            .with_ansi(true)
-            .with_level(true)
-            .with_file(false)
-            .with_line_number(false)
-            .compact()
-            .finish()
-            .with(tracing_subscriber::filter::filter_fn(move |metadata| {
-                match metadata.level() {
-                    &Level::TRACE => false,
-                    &Level::DEBUG => args.debug,
-                    _ => true,
-                }
-            })),
-    )
-    .unwrap();
+    let log_file = fs::OpenOptions::new()
+        .write(true)
+        .create(true)
+        .truncate(true)
+        .open("gitup.log")
+        .map_err(|e| e.to_string())?;
+    Registry::default()
+        .with(
+            layer()
+                .with_writer(io::stdout.with_max_level(
+                    if args.debug {
+                        Level::DEBUG
+                    } else {
+                        Level::INFO
+                    },
+                ))
+                .with_ansi(true)
+                .with_level(true)
+                .with_file(false)
+                .with_line_number(false)
+                .compact(),
+        )
+        .with(
+            layer()
+                .with_writer(log_file.with_max_level(Level::DEBUG))
+                .with_ansi(false)
+                .with_level(true)
+                .with_file(false)
+                .with_line_number(false)
+                .compact(),
+        )
+        .init();
 
-    let config = if args.config.is_some() && args.config.as_ref().unwrap().is_file() {
-        let config_ref = args.config.as_ref().unwrap();
-        debug!("Configuration file found, loading ...");
-        info!("Loading configuration from '{}'", config_ref.display());
-
-        // Load configuration from file
-        let config = fs::read_to_string(config_ref.as_path());
-
-        if config.is_err() {
-            error!(
-                "Failed to read configuration file: {}",
-                config.as_ref().err().unwrap()
-            );
-            return Err(config.err().unwrap().to_string());
-        }
-
-        debug!("Parsing configuration ...");
-        let config = serde_json::from_str::<OptionalArgs>(config.unwrap().as_str());
-        if config.is_err() {
-            error!(
-                "Failed to parse configuration file: {}",
-                config.as_ref().err().unwrap()
-            );
-            return Err(config.err().unwrap().to_string());
-        }
-        let config = config.unwrap();
-
-        debug!("Merging configuration ...");
-        // Merge configuration from file with command line arguments
-        let config = config.build(args);
-
-        info!("Configuration loaded successfully");
-
-        config
-    }
-    else {
-        info!("No configuration file found, using command line arguments");
-
-        args
-    };
+    let config = merge_configuration_file(args)?;
 
     info!("Starting Gitup daemon ...");
 
-    debug!("Checking connection to repository ...");
-    check_connection(&config).await?;
-    debug!("Connection to repository successful");
+    debug!("Initializing storage providers ...");
+    let testing_providers = storage_providers::init_providers(&config.providers).map_err(|e| e.to_string())?;
+    let mut providers = Arc::new(RwLock::new(Vec::new()));
+
+    debug!("Checking connection to storage providers ...");
+
+    let mut pending_provider_checks = Vec::new();
+    for (_, mut provider) in testing_providers.into_iter().enumerate() {
+        let providers = providers.clone();
+        pending_provider_checks.push(tokio::spawn(async move {
+            match provider.check_connection().await {
+                Ok(_) => {
+                    info!("Connection to provider '{}' successful", provider.name());
+                    let mut providers = providers.write().await;
+                    providers.push(provider);
+                },
+                Err(e) => {
+                    error!("Connection to provider '{}' failed: {}", provider.name(), e);
+                    warn!(
+                        "Provider {} removed from the active list because of previous error",
+                        provider
+                    );
+                },
+            }
+        }));
+    }
+    // Wait for all provider checks to finish
+    futures::future::join_all(pending_provider_checks).await;
+
+    // scope restriction, drop the lock after this point
+    {
+        // Check if there are any providers available
+        let working_providers = providers.read().await;
+        if working_providers.is_empty() {
+            error!("No storage providers available, exiting ...");
+            return Err("No storage providers available".to_string());
+        }
+    }
+
+    backup(&config, providers)
+        .await
+        .map_err(|e| e.to_string())?;
 
     Ok(())
-}
-
-/// Check the connection to the repository
-async fn check_connection(args: &Args) -> Result<(), String> {
-    let repository_url = args.repository_url.as_ref().unwrap();
-    let pat = args.pat.as_ref().unwrap();
-
-    // prepare the request
-    let req = make_request(RequestEndpoint::Meta, repository_url, pat);
-    if req.is_err() {
-        error!("Failed to create request: {}", req.as_ref().err().unwrap());
-        return Err(req.err().unwrap().to_string());
-    }
-    let req = req.unwrap();
-    let response = req.send().await;
-
-    if response.is_err() {
-        error!(
-            "Failed to connect to repository: {}",
-            response.as_ref().err().unwrap()
-        );
-        return Err(response.err().unwrap().to_string());
-    }
-    let response = response.unwrap();
-
-    if response.status().is_success() {
-        let response = response.json::<UsefulMetadata>().await;
-
-        if response.is_err() {
-            error!(
-                "Failed to parse response: {}",
-                response.as_ref().err().unwrap()
-            );
-            return Err(response.err().unwrap().to_string());
-        }
-        let response = response.unwrap();
-
-        if response.archived {
-            error!("Repository archived, cannot continue");
-            return Err("Repository archived, cannot continue".to_string());
-        }
-        if response.disabled {
-            error!("Repository disabled, cannot continue");
-            return Err("Repository disabled, cannot continue".to_string());
-        }
-
-        debug!("Repository visibility: {}", response.visibility);
-
-        if response.visibility != "private" && response.visibility != "internal" {
-            warn!("Repository is public, consider making it private");
-        }
-
-        return Ok(());
-    }
-
-    error!("Failed to connect to repository: {}", response.status());
-    Err(format!(
-        "Request responded with status {}",
-        response.status().to_string()
-    ));
 }

@@ -8,7 +8,7 @@
   "multipart": true,
   "paths": [
     "./daemon/src/main.rs",
-    "./gui/"
+    "./gui/**/*"
   ],
   "debug": true,
   "compress": true,

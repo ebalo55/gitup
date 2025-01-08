@@ -1,8 +1,18 @@
-use std::path::PathBuf;
+use std::{fs, path::PathBuf};
 
 use clap::{Parser, ValueEnum};
-use optional_struct::optional_struct;
+use optional_struct::{optional_struct, Applicable};
 use serde::{Deserialize, Serialize};
+use tracing::{debug, error, info};
+
+use crate::byte_size::MEGABYTE;
+
+/// The size of the encryption buffer
+pub static ENCRYPTION_BUFFER_SIZE: u64 = 1 * MEGABYTE;
+/// The size of the decryption buffer
+pub static DECRYPTION_BUFFER_SIZE: u64 = ENCRYPTION_BUFFER_SIZE + 24; // 192 bits per nonce
+/// The name of the metadata file
+pub static METADATA_FILE: &str = "backup.meta.gitup";
 
 /// Defines how the backup should be executed
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Serialize, Deserialize)]
@@ -13,6 +23,9 @@ pub enum OperationalMode {
     /// Execute incremental backups
     #[serde(alias = "incremental")]
     Incremental,
+    /// Restore a backup
+    #[serde(alias = "restore")]
+    Restore,
 }
 
 /// Data size unit
@@ -41,8 +54,9 @@ pub struct Args {
     /// Defines how the backup should be executed
     #[arg(short, long, value_enum, required_unless_present = "config")]
     pub operational_mode: Option<OperationalMode>,
-    /// Whether to backup each folder in a separate branch for independent versioning and simplified
-    /// management.
+    /// Whether to backup each folder separately to facilitate granular backup and recovery.
+    /// This will increase the overall backup size but drastically improve the recovery process
+    /// speed in case of partial data restore.
     #[arg(short, long)]
     pub folder_branching: bool,
     /// Whether to automatically split files that exceed a predefined size to optimize storage and
@@ -60,10 +74,6 @@ pub struct Args {
         value_enum
     )]
     pub split_unit:       SizeUnit,
-    /// Whether to record each file independently within the repository to facilitate granular
-    /// backup and recovery processes. This will increase the overall backup size.
-    #[arg(short, long)]
-    pub multipart:        bool,
     /// The paths to backup. Each path can be a file or folder, in the case of a folder all its
     /// contents will be backed up recursively.
     #[arg(short, long)]
@@ -72,7 +82,7 @@ pub struct Args {
     #[arg(short, long)]
     pub debug:            bool,
     /// Whether to compress the backup before uploading it to the repository.
-    #[arg(short, long)]
+    #[arg(long)]
     pub compress:         bool,
     /// Whether to encrypt the backup before uploading it to the repository.
     #[arg(short, long)]
@@ -82,12 +92,55 @@ pub struct Args {
     pub key:              Option<String>,
     /// The storage provider to use for the backup.
     /// Use the gitup provider url format:
-    /// `gitup://<auth-token>:<provider-name>/<provider-dependant-fragments>` For a full list of
-    /// supported providers and their configuration options, run `gitup --provider-list`.
+    /// `gitup://<auth-token>:<provider-name>/<provider-dependant-fragments>`.
+    /// For a full list of supported providers and their configuration options, run
+    /// `gitup --provider-list`.
     #[arg(long, required_unless_present = "config")]
     pub providers:        Vec<String>,
     /// Executes Gitup in provider list mode, displaying a list of all available storage providers
     /// and their configuration options.
     #[arg(long, required_unless_present_any = &["config", "providers", "operational_mode"])]
     pub provider_list:    bool,
+}
+
+/// Merges the configuration file with the command line arguments
+pub fn merge_configuration_file(args: Args) -> Result<Args, String> {
+    if args.config.is_some() && args.config.as_ref().unwrap().is_file() {
+        let config_ref = args.config.as_ref().unwrap();
+        debug!("Configuration file found, loading ...");
+        info!("Loading configuration from '{}'", config_ref.display());
+
+        // Load configuration from file
+        let config = fs::read_to_string(config_ref.as_path());
+
+        if config.is_err() {
+            error!(
+                "Failed to read configuration file: {}",
+                config.as_ref().err().unwrap()
+            );
+            return Err(config.err().unwrap().to_string());
+        }
+
+        debug!("Parsing configuration ...");
+        let config = serde_json::from_str::<OptionalArgs>(config.unwrap().as_str());
+        if config.is_err() {
+            error!(
+                "Failed to parse configuration file: {}",
+                config.as_ref().err().unwrap()
+            );
+            return Err(config.err().unwrap().to_string());
+        }
+        let config = config.unwrap();
+
+        debug!("Merging configuration ...");
+        // Merge configuration from file with command line arguments
+        let config = config.build(args);
+
+        info!("Configuration loaded successfully");
+
+        return Ok(config);
+    }
+
+    info!("No configuration file found, using command line arguments");
+    Ok(args)
 }

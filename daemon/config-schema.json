@@ -5,7 +5,11 @@
   "properties": {
     "operational_mode": {
       "type": "string",
-      "enum": ["full", "incremental"],
+      "enum": [
+        "full",
+        "incremental",
+        "restore"
+      ],
       "description": "Defines how the backup should be executed."
     },
     "folder_branching": {
@@ -27,10 +31,6 @@
       "enum": ["kilobytes", "megabytes", "gigabytes"],
       "default": "megabytes",
       "description": "Unit of measurement for split size. Required if 'split' is true."
-    },
-    "multipart": {
-      "type": "boolean",
-      "description": "Record each file independently for granular backup and recovery."
     },
     "paths": {
       "type": "array",
