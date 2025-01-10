@@ -108,7 +108,7 @@ pub struct Args {
 }
 
 /// Merges the configuration file with the command line arguments
-pub fn merge_configuration_file(args: Args) -> Result<Args, String> {
+pub fn merge_configuration_file(mut args: Args) -> Result<Args, String> {
     if args.config.is_some() && args.config.as_ref().unwrap().is_file() {
         let config_ref = args.config.as_ref().unwrap();
         debug!("Configuration file found, loading ...");
@@ -135,6 +135,24 @@ pub fn merge_configuration_file(args: Args) -> Result<Args, String> {
             return Err(config.err().unwrap().to_string());
         }
         let config = config.unwrap();
+
+        // override some boolean flags from configuration if they are false in the command line (aka not
+        // set)
+        if config.debug.is_some() && !args.debug {
+            args.debug = config.debug.unwrap();
+        }
+        if config.compress.is_some() && !args.compress {
+            args.compress = config.compress.unwrap();
+        }
+        if config.encrypt.is_some() && !args.encrypt {
+            args.encrypt = config.encrypt.unwrap();
+        }
+        if config.dry_run.is_some() && !args.dry_run {
+            args.dry_run = config.dry_run.unwrap();
+        }
+        if config.folder_branching.is_some() && !args.folder_branching {
+            args.folder_branching = config.folder_branching.unwrap();
+        }
 
         debug!("Merging configuration ...");
         // Merge configuration from file with command line arguments
