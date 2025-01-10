@@ -1,6 +1,6 @@
+use std::{fmt::Display, sync::Arc};
+
 use async_trait::async_trait;
-use std::fmt::Display;
-use std::sync::Arc;
 
 #[async_trait]
 pub trait StorageProvider: Display + Send + Sync {
@@ -24,25 +24,44 @@ pub trait StorageProvider: Display + Send + Sync {
     fn get_available_space(&self) -> u64;
 }
 
-pub trait CreatableStorageProvider: StorageProvider {
+pub trait CreatableStorageProvider: StorageProvider + Default {
     /// Check if the given URL is a provider URL
+    ///
+    /// # Arguments
+    ///
+    /// * `url` - The URL to check
+    ///
+    /// # Returns
+    ///
+    /// `true` if the URL is a provider URL, `false` otherwise
     fn is_provider_url(url: &str) -> bool
-                       where Self: Sized;
+    where
+        Self: Sized;
 
     /// Initialize the storage provider with the given URL
     ///
     /// # Arguments
     ///
     /// * `url` - The URL to initialize the storage provider with
+    ///
+    /// # Returns
+    ///
+    /// A new instance of the storage provider
     fn new(url: &str) -> Result<Self, ProviderError>
-           where Self: Sized;
+    where
+        Self: Sized;
+
+    /// Print the provider information
+    fn print_provider_info() {
+        let instance = Self::default();
+        println!("Provider: {}", instance.name());
+        println!("\t- URL: {}", instance.url());
+    }
 }
 
 /// Implement `Clone` for `Box<dyn StorageProvider>` using `clone_box`
 impl Clone for Box<dyn StorageProvider> {
-    fn clone(&self) -> Box<dyn StorageProvider> {
-        self.clone_box()
-    }
+    fn clone(&self) -> Box<dyn StorageProvider> { self.clone_box() }
 }
 
 /// The error type for the storage provider

@@ -27,11 +27,11 @@ use crate::{
 /// # Returns
 ///
 /// An empty result
-pub async fn store_snapshot(metadata: Arc<RwLock<BackupMetadata>>) -> Result<(), BackupError> {
+pub async fn store_snapshot(metadata: Arc<RwLock<BackupMetadata>>) -> Result<String, BackupError> {
     let metadata = metadata.read().await;
 
     // Create the path for the snapshot file (<current_timestamp>-<SNAPSHOT_FILE>)
-    let metadata_path = PathBuf::from(format!(
+    let snapshot_path = PathBuf::from(format!(
         "{}-{}",
         SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
@@ -42,7 +42,7 @@ pub async fn store_snapshot(metadata: Arc<RwLock<BackupMetadata>>) -> Result<(),
 
     // Open the file for writing
     let mut snapshot_file = open_file_or_fail(
-        metadata_path.display().to_string().as_str(),
+        snapshot_path.display().to_string().as_str(),
         FileMode::Create,
     )
     .await
@@ -63,12 +63,12 @@ pub async fn store_snapshot(metadata: Arc<RwLock<BackupMetadata>>) -> Result<(),
     sleep(std::time::Duration::from_secs(1)).await;
 
     // Get the size of the uncompressed snapshot
-    let uncompressed_size = file_size(metadata_path.display().to_string().as_str())
+    let uncompressed_size = file_size(snapshot_path.display().to_string().as_str())
         .map_err(|e| BackupError::CannotReadFile(e.to_string()))?;
 
     // Compress the snapshot
     let compressed_snapshot = compress(
-        metadata_path.display().to_string(),
+        snapshot_path.display().to_string(),
         Arc::new(Compression::best()),
     )
     .await?;
@@ -84,8 +84,8 @@ pub async fn store_snapshot(metadata: Arc<RwLock<BackupMetadata>>) -> Result<(),
         compute_size_variation(uncompressed_size as f64, compressed_size as f64)
     );
 
-    info!("Snapshot stored at '{}'", metadata_path.display());
+    info!("Snapshot stored at '{}'", snapshot_path.display());
     info!("Snapshots are not encrypted, make sure to store them securely as they are your source of restore");
 
-    Ok(())
+    Ok(compressed_snapshot)
 }

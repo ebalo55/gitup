@@ -9,9 +9,10 @@ mod storage_providers;
 use std::{collections::HashMap, fs, io, mem, path::PathBuf, sync::Arc};
 
 use clap::{Parser, ValueEnum};
+use futures::{stream, StreamExt};
 use optional_struct::{optional_struct, Applicable};
 use serde::{Deserialize, Serialize};
-use tokio::sync::{Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, error, field::debug, info, warn, Level};
 use tracing_subscriber::{
     fmt::{
@@ -26,13 +27,21 @@ use tracing_subscriber::{
 
 use crate::{
     backup::backup,
-    configuration::{merge_configuration_file, Args, OptionalArgs},
-    storage_providers::provider::StorageProvider,
+    configuration::{merge_configuration_file, Args, OperationalMode, OptionalArgs, MAX_THREADS},
+    storage_providers::provider::{CreatableStorageProvider, StorageProvider},
 };
 
 #[tokio::main]
 async fn main() -> Result<(), String> {
     let args = Args::parse();
+
+    // Print the list of available storage providers and exit
+    if args.provider_list {
+        storage_providers::github::Provider::print_provider_info();
+        return Ok(());
+    }
+
+    let config = merge_configuration_file(args)?;
 
     // Setup tracing
     let log_file = fs::OpenOptions::new()
@@ -45,7 +54,7 @@ async fn main() -> Result<(), String> {
         .with(
             layer()
                 .with_writer(io::stdout.with_max_level(
-                    if args.debug {
+                    if config.debug {
                         Level::DEBUG
                     }
                     else {
@@ -69,8 +78,6 @@ async fn main() -> Result<(), String> {
         )
         .init();
 
-    let config = merge_configuration_file(args)?;
-
     info!("Starting Gitup daemon ...");
 
     debug!("Initializing storage providers ...");
@@ -79,28 +86,37 @@ async fn main() -> Result<(), String> {
 
     debug!("Checking connection to storage providers ...");
 
-    let mut pending_provider_checks = Vec::new();
-    for (_, mut provider) in testing_providers.into_iter().enumerate() {
-        let providers = providers.clone();
-        pending_provider_checks.push(tokio::spawn(async move {
-            match provider.check_connection().await {
-                Ok(_) => {
-                    info!("Connection to provider '{}' successful", provider.name());
-                    let mut providers = providers.write().await;
-                    providers.push(provider);
-                },
-                Err(e) => {
-                    error!("Connection to provider '{}' failed: {}", provider.name(), e);
-                    warn!(
-                        "Provider {} removed from the active list because of previous error",
-                        provider
-                    );
-                },
+    // Limit the number of concurrent tasks
+    let semaphore = Arc::new(Semaphore::new(*MAX_THREADS));
+
+    let tasks = stream::iter(testing_providers.into_iter())
+        .map(|mut provider| {
+            let providers = providers.clone();
+            let semaphore = semaphore.clone();
+
+            async move {
+                let _permit = semaphore.acquire().await;
+
+                match provider.check_connection().await {
+                    Ok(_) => {
+                        info!("Connection to provider '{}' successful", provider.name());
+                        let mut providers = providers.write().await;
+                        providers.push(provider);
+                    },
+                    Err(e) => {
+                        error!("Connection to provider '{}' failed: {}", provider.name(), e);
+                        warn!(
+                            "Provider {} removed from the active list because of previous error",
+                            provider
+                        );
+                    },
+                }
             }
-        }));
-    }
-    // Wait for all provider checks to finish
-    futures::future::join_all(pending_provider_checks).await;
+        })
+        .buffer_unordered(*MAX_THREADS);
+
+    // Execute the tasks
+    tasks.collect::<()>().await;
 
     // scope restriction, drop the lock after this point
     {
@@ -112,9 +128,15 @@ async fn main() -> Result<(), String> {
         }
     }
 
-    backup(&config, providers)
-        .await
-        .map_err(|e| e.to_string())?;
+    let op_mode = config.operational_mode.unwrap();
+    if op_mode != OperationalMode::Restore {
+        backup(&config, providers)
+            .await
+            .map_err(|e| e.to_string())?;
+    }
+    else if op_mode == OperationalMode::Restore {
+        todo!("Restore functionality not implemented yet");
+    }
 
     Ok(())
 }

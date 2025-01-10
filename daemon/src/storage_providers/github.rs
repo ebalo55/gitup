@@ -11,10 +11,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use tracing::{debug, warn};
 
-use crate::byte_size::format_bytesize;
 use crate::{
     base64,
-    byte_size::{GIGABYTE, KILOBYTE, MEGABYTE},
+    byte_size::{format_bytesize, GIGABYTE, KILOBYTE, MEGABYTE},
     storage_providers::provider::{CreatableStorageProvider, ProviderError, StorageProvider},
 };
 
@@ -32,13 +31,13 @@ enum RequestEndpoint {
 #[derive(Debug, Deserialize)]
 pub struct UsefulMetadata {
     /// Whether the repository is archived
-    pub archived: bool,
+    pub archived:   bool,
     /// Whether the repository is disabled
-    pub disabled: bool,
+    pub disabled:   bool,
     /// The repository visibility
     pub visibility: String,
     /// The repository size in kilobytes
-    pub size: u64,
+    pub size:       u64,
 }
 
 /// A struct representing the data to commit to the repository
@@ -51,14 +50,14 @@ pub struct CommitData {
 }
 
 /// GitHub storage provider
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct Provider {
     /// The owner of the repository
-    owner: String,
+    owner:           String,
     /// The repository name
-    repo: String,
+    repo:            String,
     /// The personal access token
-    pat: String,
+    pat:             String,
     /// The available space in the repository
     available_space: u64,
 }
@@ -75,9 +74,9 @@ impl Provider {
     /// The request builder with the headers appended
     fn prepare_github_request_headers(&self, req: RequestBuilder) -> RequestBuilder {
         req.header("Accept", "application/vnd.github+json")
-           .header("User-Agent", "Gitup daemon")
-           .header("Authorization", format!("Bearer {}", self.pat))
-           .header("X-GitHub-Api-Version", "2022-11-28")
+            .header("User-Agent", "Gitup daemon")
+            .header("Authorization", format!("Bearer {}", self.pat))
+            .header("X-GitHub-Api-Version", "2022-11-28")
     }
 
     /// Prepare a request to the GitHub API
@@ -98,7 +97,7 @@ impl Provider {
                     "https://api.github.com/repos/{}/{}",
                     self.owner, self.repo
                 )))
-            }
+            },
             RequestEndpoint::Commit => {
                 self.prepare_github_request_headers(client.put(format!(
                     "https://api.github.com/repos/{}/{}/contents/{}",
@@ -106,7 +105,7 @@ impl Provider {
                     self.repo,
                     extra.unwrap().get("path").unwrap()
                 )))
-            }
+            },
         }
     }
 }
@@ -125,9 +124,9 @@ impl Display for Provider {
 
 #[async_trait]
 impl StorageProvider for Provider {
-    fn name(&self) -> &str { "GitHub" }
+    fn name(&self) -> &'static str { "GitHub" }
 
-    fn url(&self) -> &str { "gitup://<auth-token>:github/<owner>/<repo>" }
+    fn url(&self) -> &'static str { "gitup://<auth-token>:github/<owner>/<repo>" }
 
     async fn check_connection(&mut self) -> Result<(), ProviderError> {
         // prepare the request and send it
@@ -171,7 +170,8 @@ impl StorageProvider for Provider {
             let git_size = response.size * KILOBYTE;
             if git_size > 750 * MEGABYTE && git_size <= 1 * GIGABYTE {
                 warn!("Repository size exceeds 750MB, you're likely to violate GitHub's terms of service soon");
-            } else if git_size > 1 * GIGABYTE {
+            }
+            else if git_size > 1 * GIGABYTE {
                 return Err(ProviderError::PreconditionsFailed(
                     "Repository size exceeds 1GB, cannot continue".to_owned(),
                 ));
@@ -211,7 +211,11 @@ impl StorageProvider for Provider {
         }
         let data = data.unwrap();
 
-        debug!("Uploading {} bytes to GitHub at '{}'", format_bytesize(data_size as u64), path);
+        debug!(
+            "Uploading {} bytes to GitHub at '{}'",
+            format_bytesize(data_size as u64),
+            path
+        );
         let req = self
             .make_request(
                 RequestEndpoint::Commit,
@@ -234,7 +238,10 @@ impl StorageProvider for Provider {
 
         if !req.status().is_success() {
             let status = req.status();
-            debug!("Failed to upload data, the api answered with {:?}", req.text().await.unwrap());
+            debug!(
+                "Failed to upload data, the api answered with {:?}",
+                req.text().await.unwrap()
+            );
             return Err(ProviderError::ConnectionError(format!(
                 "Failed to upload data: {}",
                 status
@@ -246,7 +253,10 @@ impl StorageProvider for Provider {
         // The following line was commented out to avoid deadlocks due to the mutable requirement of self.
         // Uncommenting this will result in a drastical reduction of the overall performance of the daemon.
         // self.available_space -= data_size as u64;
-        debug!("Uploaded {} bytes to GitHub", format_bytesize(data_size as u64));
+        debug!(
+            "Uploaded {} bytes to GitHub",
+            format_bytesize(data_size as u64)
+        );
         Ok(())
     }
 
@@ -269,9 +279,9 @@ impl CreatableStorageProvider for Provider {
         let caps = caps.unwrap();
 
         Ok(Self {
-            owner: caps.name("owner").unwrap().as_str().to_string(),
-            repo: caps.name("repo").unwrap().as_str().to_string(),
-            pat: caps.name("pat").unwrap().as_str().to_string(),
+            owner:           caps.name("owner").unwrap().as_str().to_string(),
+            repo:            caps.name("repo").unwrap().as_str().to_string(),
+            pat:             caps.name("pat").unwrap().as_str().to_string(),
             available_space: MAX_REPOSITORY_SIZE,
         })
     }

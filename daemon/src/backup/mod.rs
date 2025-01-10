@@ -57,6 +57,7 @@ use crate::{
         structures::{BackupFile, BackupMetadata, BackupPart, BackupStats, FileBackupMetadata, FolderBackupMetadata},
         upload::upload_backup,
         upload_checks::check_available_size,
+        utility::compute_size_variation,
     },
     byte_size::{format_bytesize, GIGABYTE, KILOBYTE, MEGABYTE},
     configuration::{Args, SizeUnit, DEFAULT_BUFFER_SIZE, SNAPSHOT_FILE},
@@ -101,6 +102,11 @@ pub async fn backup(args: &Args, providers: Arc<RwLock<Vec<Box<dyn StorageProvid
     };
 
     info!("Backing up ...");
+
+    if args.dry_run {
+        warn!("Dry-run mode enabled, no data will be uploaded to the storage providers");
+    }
+
     let archives = join_files(grouped_files, metadata.clone()).await?;
     debug!(
         "{} archive(s) created at '{}'",
@@ -121,7 +127,7 @@ pub async fn backup(args: &Args, providers: Arc<RwLock<Vec<Box<dyn StorageProvid
     )
     .await?;
 
-    let archives = if args.encrypt && args.key.is_some() {
+    let mut archives = if args.encrypt && args.key.is_some() {
         // Encrypt the archives
         let encrypted_archives = encrypt_archives(args.key.as_ref().unwrap(), archives, metadata.clone()).await?;
         debug!(
@@ -159,21 +165,67 @@ pub async fn backup(args: &Args, providers: Arc<RwLock<Vec<Box<dyn StorageProvid
     info!("Checking available space on storage providers");
 
     let snapshot_size = estimate_snapshot_size(args, metadata.clone()).await as u64;
-    let final_size = final_size + snapshot_size;
+    let estimated_final_size = final_size + snapshot_size;
     debug!(
         "Snapshot estimated size: {}",
         format_bytesize(snapshot_size)
     );
-    check_available_size(providers.clone(), final_size).await?;
 
-    upload_backup(args, archives, metadata.clone(), providers.clone()).await?;
+    if !args.dry_run {
+        check_available_size(providers.clone(), estimated_final_size).await?;
 
-    cleanup_temp_folder();
+        // Upload the archives
+        upload_backup(args, archives, metadata.clone(), providers.clone()).await?;
+        cleanup_temp_folder();
+    }
+    else {
+        warn!("Dry-run mode enabled, no data will be uploaded to the storage providers");
+        debug!("Moving backup data to local folder");
 
-    store_snapshot(metadata.clone()).await?;
+        let mut new_archives = Vec::new();
+
+        for archive in archives {
+            let archive_path = PathBuf::from(archive.clone());
+            let archive_name = archive_path.file_name().ok_or(BackupError::GeneralError(
+                "Failed to get archive name".to_string(),
+            ))?;
+            let archive_name = archive_name.to_str().ok_or(BackupError::GeneralError(
+                "Failed to convert archive name to string".to_string(),
+            ))?;
+
+            let new_path = PathBuf::from(format!("./{}", archive_name));
+            new_archives.push(new_path.clone().display().to_string());
+
+            fs::rename(archive, new_path.clone()).map_err(|e| BackupError::GeneralError(e.to_string()))?;
+            debug!(
+                "Archive '{}' moved to '{}'",
+                archive_name,
+                new_path.display()
+            );
+        }
+
+        archives = new_archives;
+    }
+
+    let snapshot = store_snapshot(metadata.clone()).await?;
+    debug!("Snapshot stored at '{}'", snapshot);
+
+    let snapshot_size = file_size(&snapshot).map_err(|e| BackupError::CannotReadFile(e.to_string()))?;
+
+    let original_size = {
+        let metadata = metadata.read().await;
+        metadata.stats.original_size
+    };
+    let backup_size = final_size + snapshot_size;
 
     let duration = now.elapsed().unwrap_or_default();
     info!("Backup completed in {:.2} seconds", duration.as_secs_f64());
+    info!("Original size: {}", format_bytesize(original_size));
+    info!("Backup size: {}", format_bytesize(backup_size));
+    info!(
+        "Backup size variation: {}",
+        compute_size_variation(original_size as f64, backup_size as f64)
+    );
 
     Ok(())
 }
