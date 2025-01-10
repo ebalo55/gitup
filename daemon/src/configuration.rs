@@ -101,6 +101,10 @@ pub struct Args {
     /// and their configuration options.
     #[arg(long, required_unless_present_any = &["config", "providers", "operational_mode"])]
     pub provider_list:    bool,
+    /// Whether to run the backup in dry-run mode, where no data is actually uploaded to the
+    /// repositories
+    #[arg(long)]
+    pub dry_run:          bool,
 }
 
 /// Merges the configuration file with the command line arguments

@@ -16,10 +16,6 @@
       "type": "boolean",
       "description": "Backup each folder in a separate branch for independent versioning."
     },
-    "split": {
-      "type": "boolean",
-      "description": "Automatically split files that exceed a predefined size."
-    },
     "split_size": {
       "type": "integer",
       "minimum": 1,
@@ -57,6 +53,10 @@
       "type": "array",
       "items": { "type": "string" },
       "description": "List of storage providers in 'gitup://<auth-token>:<provider-name>/<fragments>' format."
+    },
+    "dry_run": {
+      "type": "boolean",
+      "description": "Simulate the backup process without actually uploading any data."
     }
   },
   "required": ["paths", "providers"],
