@@ -1,6 +1,7 @@
-use std::{fs, path::PathBuf};
+use std::{fs, path::PathBuf, thread};
 
 use clap::{Parser, ValueEnum};
+use once_cell::sync::Lazy;
 use optional_struct::{optional_struct, Applicable};
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
@@ -8,11 +9,19 @@ use tracing::{debug, error, info};
 use crate::byte_size::MEGABYTE;
 
 /// The size of the encryption buffer
-pub static ENCRYPTION_BUFFER_SIZE: u64 = 1 * MEGABYTE;
+pub static DEFAULT_BUFFER_SIZE: u64 = 1 * MEGABYTE;
 /// The size of the decryption buffer
-pub static DECRYPTION_BUFFER_SIZE: u64 = ENCRYPTION_BUFFER_SIZE + 24; // 192 bits per nonce
+pub static DECRYPTION_BUFFER_SIZE: u64 = DEFAULT_BUFFER_SIZE + 24; // 192 bits per nonce
 /// The name of the metadata file
-pub static METADATA_FILE: &str = "backup.meta.gitup";
+pub static SNAPSHOT_FILE: &str = "gitup.snap";
+pub static MAX_THREADS: Lazy<usize> = Lazy::new(|| {
+    // This must fail if the number of CPUs cannot be determined
+    let cpus = thread::available_parallelism().unwrap();
+    debug!("Number of CPUs: {}", cpus);
+
+    // The number of threads is the number of CPUs
+    cpus.get()
+});
 
 /// Defines how the backup should be executed
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Serialize, Deserialize)]
@@ -59,20 +68,11 @@ pub struct Args {
     /// speed in case of partial data restore.
     #[arg(short, long)]
     pub folder_branching: bool,
-    /// Whether to automatically split files that exceed a predefined size to optimize storage and
-    /// ensure compatibility with repository limits.
-    #[arg(short, long)]
-    pub split:            bool,
     /// The size at which files should be split, if the split option is enabled.
-    #[arg(long, default_value = "25", required_if_eq("split", "true"))]
+    #[arg(long, default_value = "25")]
     pub split_size:       u16,
     /// The unit of the split size.
-    #[arg(
-        long,
-        default_value = "megabytes",
-        required_if_eq("split", "true"),
-        value_enum
-    )]
+    #[arg(long, default_value = "megabytes", value_enum)]
     pub split_unit:       SizeUnit,
     /// The paths to backup. Each path can be a file or folder, in the case of a folder all its
     /// contents will be backed up recursively.

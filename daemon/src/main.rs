@@ -2,6 +2,8 @@ mod backup;
 mod base64;
 mod byte_size;
 mod configuration;
+mod hash;
+mod padding;
 mod storage_providers;
 
 use std::{collections::HashMap, fs, io, mem, path::PathBuf, sync::Arc};
@@ -45,7 +47,8 @@ async fn main() -> Result<(), String> {
                 .with_writer(io::stdout.with_max_level(
                     if args.debug {
                         Level::DEBUG
-                    } else {
+                    }
+                    else {
                         Level::INFO
                     },
                 ))

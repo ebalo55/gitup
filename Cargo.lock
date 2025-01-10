@@ -880,6 +880,7 @@ dependencies = [
     "futures",
     "glob",
     "hkdf",
+    "once_cell",
  "optional_struct",
     "regex",
  "reqwest",

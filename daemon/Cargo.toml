@@ -34,6 +34,7 @@ flate2 = { version = "1.0.35", default-features = false, features = ["zlib-ng"] 
 cuid2 = { version = "0.1.3" }
 chacha20poly1305 = { version = "0.10.1" }
 hkdf = { version = "0.12.4" }
+once_cell = { version = "1.20.2" }
 
 [lints]
 workspace = true
