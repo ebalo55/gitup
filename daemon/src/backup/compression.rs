@@ -146,23 +146,10 @@ pub async fn compress(file_path: String, compression: Arc<Compression>) -> Resul
     // prepare the compressor, reader and writer
     let mut compressor = ZlibEncoder::new(file.reader, *compression);
 
-    let mut total_bytes_read = 0;
-
     // read the file and write it to the compressed file in chunks of COMPRESSION_BUFFER_SIZE
     loop {
-        // Ensure we don't read beyond the file's total size
-        if total_bytes_read >= file_length {
-            break;
-        }
-
-        // Calculate the remaining bytes to read
-        let remaining_bytes = (file_length - total_bytes_read) as usize;
-
-        // Define the buffer size as the minimum between the remaining bytes and the split size
-        let buffer_size = remaining_bytes.min(DEFAULT_BUFFER_SIZE as usize);
-
         // create the buffer to store the part
-        let mut buffer = vec![0; buffer_size];
+        let mut buffer = vec![0; DEFAULT_BUFFER_SIZE as usize];
 
         // read the part
         let bytes_read = compressor
@@ -178,9 +165,6 @@ pub async fn compress(file_path: String, compression: Arc<Compression>) -> Resul
             .write(&buffer)
             .await
             .map_err(|e| BackupError::CannotWrite(e.to_string()))?;
-
-        // Update the total bytes read
-        total_bytes_read = compressor.total_in();
     }
 
     // remove the original archive
@@ -191,12 +175,21 @@ pub async fn compress(file_path: String, compression: Arc<Compression>) -> Resul
     Ok(compressed_filename)
 }
 
-pub async fn uncompress(file_path: String) -> Result<String, BackupError> {
+/// Uncompresses a file
+///
+/// # Arguments
+///
+/// * `file_path` - The path to the file
+/// * `cleanup` - Whether to remove the original file
+///
+/// # Returns
+///
+/// The path to the uncompressed file
+pub async fn uncompress(file_path: String, cleanup: bool) -> Result<String, BackupError> {
     use std::io::Read;
 
     // Open the archive
     let file = make_readable_file_std(file_path.as_str()).await?;
-    let file_length = file.metadata.len();
 
     // Create the compressed archive
     let compressed_filename = format!("{}uz", file_path);
@@ -212,23 +205,10 @@ pub async fn uncompress(file_path: String) -> Result<String, BackupError> {
     // prepare the compressor, reader and writer
     let mut compressor = ZlibDecoder::new(file.reader);
 
-    let mut total_bytes_read = 0;
-
     // read the file and write it to the compressed file in chunks of COMPRESSION_BUFFER_SIZE
     loop {
-        // Ensure we don't read beyond the file's total size
-        if total_bytes_read >= file_length {
-            break;
-        }
-
-        // Calculate the remaining bytes to read
-        let remaining_bytes = (file_length - total_bytes_read) as usize;
-
-        // Define the buffer size as the minimum between the remaining bytes and the split size
-        let buffer_size = remaining_bytes.min(DEFAULT_BUFFER_SIZE as usize);
-
         // create the buffer to store the part
-        let mut buffer = vec![0; buffer_size];
+        let mut buffer = vec![0; DEFAULT_BUFFER_SIZE as usize];
 
         // read the part
         let bytes_read = compressor
@@ -244,15 +224,14 @@ pub async fn uncompress(file_path: String) -> Result<String, BackupError> {
             .write(&buffer)
             .await
             .map_err(|e| BackupError::CannotWrite(e.to_string()))?;
-
-        // Update the total bytes read
-        total_bytes_read = compressor.total_in();
     }
 
-    // remove the original archive
-    remove_file(file_path)
-        .await
-        .map_err(|e| BackupError::GeneralError(e.to_string()))?;
+    if cleanup {
+        // remove the original archive
+        remove_file(file_path)
+            .await
+            .map_err(|e| BackupError::GeneralError(e.to_string()))?;
+    }
 
     Ok(compressed_filename)
 }
@@ -263,8 +242,11 @@ mod test {
 
     #[tokio::test]
     async fn test_uncompress() {
-        uncompress("C:\\Users\\ebalo\\AppData\\Local\\Temp\\otemxlsjl30gtx2ei73tukag.gitupz".to_string())
-            .await
-            .unwrap();
+        uncompress(
+            "C:\\Users\\ebalo\\Desktop\\Projects\\rust\\gitup\\e12c5fe7tntsy9l8aujzaplf.gitupz".to_string(),
+            false,
+        )
+        .await
+        .unwrap();
     }
 }

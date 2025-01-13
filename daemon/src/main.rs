@@ -15,18 +15,21 @@ use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock, Semaphore};
 use tracing::{debug, error, field::debug, info, warn, Level};
 use tracing_subscriber::{
+    filter::FilterExt,
     fmt::{
+        format::json,
         layer,
         writer::{BoxMakeWriter, MakeWriterExt},
     },
     layer,
     layer::SubscriberExt,
     util::SubscriberInitExt,
+    Layer,
     Registry,
 };
 
 use crate::{
-    backup::backup,
+    backup::{backup, query_snapshot},
     configuration::{merge_configuration_file, Args, OperationalMode, OptionalArgs, MAX_THREADS},
     storage_providers::provider::{CreatableStorageProvider, StorageProvider},
 };
@@ -50,23 +53,45 @@ async fn main() -> Result<(), String> {
         .truncate(true)
         .open("gitup.log")
         .map_err(|e| e.to_string())?;
+
+    let stdout_layer = if !config.json {
+        layer()
+            .with_writer(io::stdout.with_max_level(
+                if config.debug {
+                    Level::DEBUG
+                }
+                else {
+                    Level::INFO
+                },
+            ))
+            .with_ansi(true)
+            .with_level(true)
+            .with_file(false)
+            .with_line_number(false)
+            .compact()
+            .boxed()
+    }
+    else {
+        layer()
+            .with_writer(io::stdout.with_max_level(
+                if config.debug {
+                    Level::DEBUG
+                }
+                else {
+                    Level::INFO
+                },
+            ))
+            .with_ansi(true)
+            .with_level(true)
+            .with_file(false)
+            .with_line_number(false)
+            .compact()
+            .json()
+            .boxed()
+    };
+
     Registry::default()
-        .with(
-            layer()
-                .with_writer(io::stdout.with_max_level(
-                    if config.debug {
-                        Level::DEBUG
-                    }
-                    else {
-                        Level::INFO
-                    },
-                ))
-                .with_ansi(true)
-                .with_level(true)
-                .with_file(false)
-                .with_line_number(false)
-                .compact(),
-        )
+        .with(stdout_layer)
         .with(
             layer()
                 .with_writer(log_file.with_max_level(Level::DEBUG))
@@ -77,6 +102,13 @@ async fn main() -> Result<(), String> {
                 .compact(),
         )
         .init();
+
+    if config.query_snapshot.is_some() {
+        query_snapshot(config.query_snapshot.unwrap(), true, config.rich_query)
+            .await
+            .map_err(|e| e.to_string())?;
+        return Ok(());
+    }
 
     info!("Starting Gitup daemon ...");
 

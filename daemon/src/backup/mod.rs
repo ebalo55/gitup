@@ -37,6 +37,7 @@ use hkdf::Hkdf;
 use optional_struct::optional_struct;
 use serde::{Deserialize, Serialize};
 use sha3::{Digest, Sha3_256, Sha3_512};
+pub use snapshot::query_snapshot;
 use tokio::{
     fs::{remove_file, File},
     io::{AsyncWriteExt, BufWriter},
@@ -80,15 +81,19 @@ pub async fn backup(args: &Args, providers: Arc<RwLock<Vec<Box<dyn StorageProvid
 
     let metadata = Arc::new(RwLock::new(BackupMetadata::default()));
 
+    {
+        let mut metadata = metadata.write().await;
+        metadata.mode = args.operational_mode.unwrap();
+
+        if let Some(incremental_on) = &args.incremental_on {
+            metadata.previous_backup = Some(incremental_on.clone());
+        }
+    }
+
     let files = map_files(&args.paths)?;
     let backup_files = dedupe_files(files, metadata.clone()).await;
 
     // Create the metadata
-    {
-        let mut metadata = metadata.write().await;
-        metadata.size_on_disk = backup_files.0 .0;
-        metadata.deduped_size = backup_files.0 .1;
-    }
     let backup_files = backup_files.1;
 
     // Group the files by folder if the option is enabled
@@ -155,12 +160,6 @@ pub async fn backup(args: &Args, providers: Arc<RwLock<Vec<Box<dyn StorageProvid
             metadata.stats.archival_size
         }
     };
-
-    // Update the metadata with the final size
-    {
-        let mut metadata = metadata.write().await;
-        metadata.size_on_disk = final_size;
-    }
 
     info!("Checking available space on storage providers");
 

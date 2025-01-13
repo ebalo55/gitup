@@ -54,6 +54,27 @@ pub async fn estimate_snapshot_size(args: &Args, metadata: Arc<RwLock<BackupMeta
     total_size
 }
 
+/// Get the size of the backup
+///
+/// # Arguments
+///
+/// * `metadata` - The metadata to get the size of
+///
+/// # Returns
+///
+/// The size of the backup
+pub fn get_backup_size(metadata: &RwLockReadGuard<BackupMetadata>) -> u64 {
+    if metadata.encrypted {
+        metadata.stats.encrypted_size
+    }
+    else if metadata.stats.compressed_size != 0 {
+        metadata.stats.compressed_size
+    }
+    else {
+        metadata.stats.archival_size
+    }
+}
+
 /// Estimates the size of the parts
 ///
 /// # Arguments
@@ -73,8 +94,9 @@ fn estimate_parts_size(args: &Args, metadata: RwLockReadGuard<BackupMetadata>) -
         SizeUnit::Gigabytes => args.split_size as u64 * GIGABYTE,
     };
 
-    let full_parts: u64 = metadata.size_on_disk / size;
-    let remainder = metadata.size_on_disk % size;
+    let backup_size = get_backup_size(&metadata);
+    let full_parts: u64 = backup_size / size;
+    let remainder = backup_size % size;
     let mut total_parts = if remainder != 0 {
         full_parts + 1
     }

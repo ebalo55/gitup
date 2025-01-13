@@ -1,4 +1,4 @@
-use std::{fs, path::PathBuf, thread};
+use std::{fmt::Display, fs, path::PathBuf, thread};
 
 use clap::{Parser, ValueEnum};
 use once_cell::sync::Lazy;
@@ -24,10 +24,11 @@ pub static MAX_THREADS: Lazy<usize> = Lazy::new(|| {
 });
 
 /// Defines how the backup should be executed
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, ValueEnum, Serialize, Deserialize, Default)]
 pub enum OperationalMode {
     /// Execute full backups
     #[serde(alias = "full")]
+    #[default]
     Full,
     /// Execute incremental backups
     #[serde(alias = "incremental")]
@@ -35,6 +36,16 @@ pub enum OperationalMode {
     /// Restore a backup
     #[serde(alias = "restore")]
     Restore,
+}
+
+impl Display for OperationalMode {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OperationalMode::Full => write!(f, "full"),
+            OperationalMode::Incremental => write!(f, "incremental"),
+            OperationalMode::Restore => write!(f, "restore"),
+        }
+    }
 }
 
 /// Data size unit
@@ -61,7 +72,8 @@ pub struct Args {
     #[arg(short, long, required_unless_present_all(&["operational_mode", "providers", "provider_list"]))]
     pub config:           Option<PathBuf>,
     /// Defines how the backup should be executed
-    #[arg(short, long, value_enum, required_unless_present = "config")]
+    #[arg(short, long, value_enum, required_unless_present_any(&["config", "query_snapshot", "provider_list"]
+    ))]
     pub operational_mode: Option<OperationalMode>,
     /// Whether to backup each folder separately to facilitate granular backup and recovery.
     /// This will increase the overall backup size but drastically improve the recovery process
@@ -105,6 +117,20 @@ pub struct Args {
     /// repositories
     #[arg(long)]
     pub dry_run:          bool,
+    /// Whether to query the snapshot file of the backup to print the snapshot information
+    #[arg(long)]
+    pub query_snapshot:   Option<String>,
+    /// Whether to display the snapshot information in a rich query format
+    #[arg(long)]
+    pub rich_query:       bool,
+    /// Whether to print logs in JSON format
+    #[arg(long)]
+    pub json:             bool,
+    /// The incremental backup to run the backup against, if any.
+    /// This is the snapshot file of the previous backup to run the incremental backup against. It
+    /// is used to determine the changes between the previous backup and the current one.
+    #[arg(long)]
+    pub incremental_on:   Option<String>,
 }
 
 /// Merges the configuration file with the command line arguments
@@ -152,6 +178,9 @@ pub fn merge_configuration_file(mut args: Args) -> Result<Args, String> {
         }
         if config.folder_branching.is_some() && !args.folder_branching {
             args.folder_branching = config.folder_branching.unwrap();
+        }
+        if config.json.is_some() && !args.json {
+            args.json = config.json.unwrap();
         }
 
         debug!("Merging configuration ...");

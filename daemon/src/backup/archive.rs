@@ -49,7 +49,7 @@ pub async fn join_files(
     let original_size = {
         let mut metadata = metadata.write().await;
         metadata.stats.archival_size = archived_size;
-        metadata.stats.original_size - metadata.stats.deduped_size
+        metadata.stats.original_size - metadata.stats.duplicates_size
     };
 
     let duration = now.elapsed().unwrap_or_default();

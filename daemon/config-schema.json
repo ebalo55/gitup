@@ -57,6 +57,10 @@
     "dry_run": {
       "type": "boolean",
       "description": "Simulate the backup process without actually uploading any data."
+    },
+    "json": {
+      "type": "boolean",
+      "description": "Output logs in JSON format."
     }
   },
   "required": ["paths", "providers"],

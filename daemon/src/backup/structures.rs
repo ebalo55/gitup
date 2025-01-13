@@ -3,27 +3,29 @@ use std::{collections::HashMap, path::PathBuf};
 use optional_struct::optional_struct;
 use serde::{Deserialize, Serialize};
 
+use crate::configuration::OperationalMode;
+
 /// Represents the metadata of the backup
 #[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct BackupMetadata {
-    /// The size of the backup in bytes
-    pub size_on_disk:   u64,
-    /// Size of the duplicates found in the backup, in bytes
-    pub deduped_size:   u64,
     /// The of folders and files in the backup with their metadata
-    pub tree:           HashMap<String, FolderBackupMetadata>,
+    pub tree:            HashMap<String, FolderBackupMetadata>,
     /// A reverse lookup table that allows to quickly find the folder of a file given the file hash
-    pub reverse_lookup: HashMap<String, String>,
+    pub reverse_lookup:  HashMap<String, String>,
     /// The time the backup was snapped at in seconds since the Unix epoch
-    pub snapped_at:     u64,
+    pub snapped_at:      u64,
     /// Whether the backup is encrypted
-    pub encrypted:      bool,
+    pub encrypted:       bool,
     /// The encryption key if any
-    pub key:            Option<String>,
+    pub key:             Option<String>,
     /// The stats of the backup
-    pub stats:          BackupStats,
+    pub stats:           BackupStats,
     /// The parts of the backup
-    pub parts:          Vec<BackupPart>,
+    pub parts:           Vec<BackupPart>,
+    /// The operational mode of the backup
+    pub mode:            OperationalMode,
+    /// The previous backup in case of an incremental backup
+    pub previous_backup: Option<String>,
 }
 
 /// Represents a part of the backup, used when splitting the backup into multiple parts
@@ -51,8 +53,6 @@ pub struct BackupStats {
     /// The original size of the backup (in bytes).
     /// This actually is the size of the files once restored
     pub original_size:   u64,
-    /// The size of the backup (in bytes) after deduplication
-    pub deduped_size:    u64,
     /// The size of the backup (in bytes) after archiving
     pub archival_size:   u64,
     /// The size of the backup (in bytes) after compression
@@ -67,7 +67,6 @@ pub struct BackupStats {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct FolderBackupMetadata {
     /// The folder identifier
-    #[serde(skip_serializing)]
     pub id:            String,
     /// The original path of the folder
     pub original_path: String,
@@ -81,7 +80,6 @@ pub struct FolderBackupMetadata {
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Clone)]
 pub struct FileBackupMetadata {
     /// The file identifier
-    #[serde(skip_serializing)]
     pub id:            String,
     /// The original path of the file
     pub original_path: String,
