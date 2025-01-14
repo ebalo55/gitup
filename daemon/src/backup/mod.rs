@@ -1,10 +1,10 @@
 mod archive;
 mod cleanup;
-mod compression;
+pub(crate) mod compression;
 mod encrypt;
-mod errors;
+pub(crate) mod errors;
 mod estimate;
-mod file;
+pub(crate) mod file;
 mod snapshot;
 mod structures;
 mod upload;
@@ -89,6 +89,8 @@ pub async fn backup(args: &Args, providers: Arc<RwLock<Vec<Box<dyn StorageProvid
             metadata.previous_backup = Some(incremental_on.clone());
         }
     }
+
+    // TODO: handle incremental backups, filtering out non-changed files
 
     let files = map_files(&args.paths)?;
     let backup_files = dedupe_files(files, metadata.clone()).await;

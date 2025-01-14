@@ -16,3 +16,22 @@ pub fn compute_size_variation(size: f64, new_size: f64) -> String {
         size_variation
     )
 }
+
+/// Replace a string recursively
+///
+/// # Arguments
+///
+/// * `haystack` - The string to search in
+/// * `needle` - The string to replace
+/// * `replace` - The string to replace with
+///
+/// # Returns
+///
+/// The string with the replacements
+pub fn replace_recursive(haystack: String, needle: &str, replace: &str) -> String {
+    let mut result = haystack.clone();
+    while result.contains(needle) {
+        result = result.replace(needle, replace);
+    }
+    result
+}
