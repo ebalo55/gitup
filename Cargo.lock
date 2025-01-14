@@ -582,10 +582,10 @@ checksum = "7e36cc9d416881d2e24f9a963be5fb1cd90966419ac844274161d10488b3e825"
 dependencies = [
  "android-tzdata",
  "iana-time-zone",
-    "js-sys",
+ "js-sys",
  "num-traits",
  "serde",
-    "wasm-bindgen",
+ "wasm-bindgen",
  "windows-targets 0.52.6",
 ]
 
@@ -691,7 +691,7 @@ version = "3.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fde0e0ec90c9dfb3b4b1a0891a7dcd0e2bffde2f7efed5fe7c9bb00e5bfb915e"
 dependencies = [
-    "windows-sys 0.59.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]
@@ -885,9 +885,9 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "chacha20poly1305",
-    "chrono",
+ "chrono",
  "clap",
-    "colored",
+ "colored",
  "cuid2",
  "flate2",
  "futures",
@@ -2113,17 +2113,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a0c10553d664a4d0bcff9f4215d0aac67a639cc68ef660840afe309b807bc9f5"
 dependencies = [
  "generic-array",
-]
-
-[[package]]
-name = "installer"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "tauri",
- "tauri-build",
- "tauri-plugin-opener",
 ]
 
 [[package]]
@@ -4832,8 +4821,8 @@ version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "704b1aeb7be0d0a84fc9828cae51dab5970fee5088f83d1dd7ee6f6246fc6ff1"
 dependencies = [
-    "serde",
-    "tracing-core",
+ "serde",
+ "tracing-core",
 ]
 
 [[package]]
@@ -4843,14 +4832,14 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8189decb5ac0fa7bc8b96b7cb9b2701d60d48805aca84a238004d665fcc4008"
 dependencies = [
  "nu-ansi-term",
-    "serde",
-    "serde_json",
+ "serde",
+ "serde_json",
  "sharded-slab",
  "smallvec",
  "thread_local",
  "tracing-core",
  "tracing-log",
-    "tracing-serde",
+ "tracing-serde",
 ]
 
 [[package]]

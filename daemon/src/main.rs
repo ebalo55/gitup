@@ -4,6 +4,7 @@ mod byte_size;
 mod configuration;
 mod hash;
 mod padding;
+mod restore;
 mod storage_providers;
 
 use std::{collections::HashMap, fs, io, mem, path::PathBuf, sync::Arc};
@@ -31,6 +32,7 @@ use tracing_subscriber::{
 use crate::{
     backup::{backup, query_snapshot},
     configuration::{merge_configuration_file, Args, OperationalMode, OptionalArgs, MAX_THREADS},
+    restore::restore,
     storage_providers::provider::{CreatableStorageProvider, StorageProvider},
 };
 
@@ -167,7 +169,9 @@ async fn main() -> Result<(), String> {
             .map_err(|e| e.to_string())?;
     }
     else if op_mode == OperationalMode::Restore {
-        todo!("Restore functionality not implemented yet");
+        restore(&config, providers.clone())
+            .await
+            .map_err(|e| e.to_string())?;
     }
 
     Ok(())

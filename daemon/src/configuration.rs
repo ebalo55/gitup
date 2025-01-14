@@ -69,7 +69,8 @@ pub enum SizeUnit {
 pub struct Args {
     /// Load the configuration from a file. Note: Command line arguments will have a higher
     /// priority.
-    #[arg(short, long, required_unless_present_all(&["operational_mode", "providers", "provider_list"]))]
+    #[arg(short, long, required_unless_present_any(&["operational_mode", "providers", "provider_list"]
+    ))]
     pub config:           Option<PathBuf>,
     /// Defines how the backup should be executed
     #[arg(short, long, value_enum, required_unless_present_any(&["config", "query_snapshot", "provider_list"]
@@ -131,6 +132,9 @@ pub struct Args {
     /// is used to determine the changes between the previous backup and the current one.
     #[arg(long)]
     pub incremental_on:   Option<String>,
+    /// The snapshot file to restore from, if mode is set to restore.
+    #[arg(long, required_if_eq("operational_mode", "restore"))]
+    pub restore_from:     Option<String>,
 }
 
 /// Merges the configuration file with the command line arguments
