@@ -167,6 +167,11 @@ pub async fn compress(file_path: String, compression: Arc<Compression>) -> Resul
             .map_err(|e| BackupError::CannotWrite(e.to_string()))?;
     }
 
+    writer
+        .flush()
+        .await
+        .map_err(|e| BackupError::CannotWrite(e.to_string()))?;
+
     // remove the original archive
     remove_file(file_path)
         .await
@@ -226,6 +231,11 @@ pub async fn uncompress(file_path: String, cleanup: bool) -> Result<String, Back
             .map_err(|e| BackupError::CannotWrite(e.to_string()))?;
     }
 
+    writer
+        .flush()
+        .await
+        .map_err(|e| BackupError::CannotWrite(e.to_string()))?;
+
     if cleanup {
         // remove the original archive
         remove_file(file_path)
@@ -243,7 +253,7 @@ mod test {
     #[tokio::test]
     async fn test_uncompress() {
         uncompress(
-            "C:\\Users\\ebalo\\Desktop\\Projects\\rust\\gitup\\e12c5fe7tntsy9l8aujzaplf.gitupz".to_string(),
+            "C:\\Users\\ebalo\\Desktop\\Projects\\rust\\gitup\\jjtw6br6c4rv5jw7zrsbwnj4.gitupz".to_string(),
             false,
         )
         .await
