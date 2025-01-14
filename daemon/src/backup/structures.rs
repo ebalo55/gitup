@@ -89,6 +89,8 @@ pub struct FileBackupMetadata {
     pub last_updated:  u64,
     /// The hash of the file
     pub hash:          String,
+    /// The list of paths where the file have been found duplicated
+    pub duplicates:    Vec<PathBuf>,
 }
 
 /// Represents a file to be backed up
