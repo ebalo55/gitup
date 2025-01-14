@@ -91,7 +91,7 @@ pub async fn store_snapshot(metadata: Arc<RwLock<BackupMetadata>>) -> Result<Str
         compute_size_variation(uncompressed_size as f64, compressed_size as f64)
     );
 
-    info!("Snapshot stored at '{}'", snapshot_path.display());
+    info!("Snapshot stored at '{}'", compressed_snapshot);
     info!("Snapshots are not encrypted, make sure to store them securely as they are your source of restore");
 
     Ok(compressed_snapshot)
@@ -302,7 +302,28 @@ pub async fn query_snapshot(path: String, print: bool, rich_text: bool) -> Resul
             compute_size_variation(metadata.stats.original_size as f64, final_size as f64)
         );
 
-        println!("  {:<20} {:>20}", "Parts".bold(), metadata.parts.len() + 1);
+        println!(
+            "  {:<20} {:>20}",
+            "Parts".bold(),
+            if metadata.parts.len() == 0 {
+                1
+            }
+            else {
+                metadata.parts.len()
+            }
+        );
+        println!();
+
+        for (key, value) in metadata.parts.iter().enumerate() {
+            println!("  {}", format!("Part {}", key + 1).bold());
+            println!("    {:<10} {:<20}", "Provider".bold(), value.provider);
+            println!("    {:<10} {:<20}", "Path".bold(), value.path);
+            println!(
+                "    {:<10} {:<20}",
+                "Size".bold(),
+                format_bytesize(value.size)
+            );
+        }
     }
     else {
         println!(
@@ -357,7 +378,8 @@ pub async fn query_snapshot(path: String, print: bool, rich_text: bool) -> Resul
         }
     }
 
-    fs::remove_file(uncompressed_snapshot_path).map_err(|e| BackupError::GeneralError(e.to_string()))?;
+    // fs::remove_file(uncompressed_snapshot_path).map_err(|e|
+    // BackupError::GeneralError(e.to_string()))?;
 
     Ok(metadata)
 }
