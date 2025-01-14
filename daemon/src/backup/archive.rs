@@ -15,7 +15,7 @@ use crate::{
         errors::BackupError,
         file::{make_readable_file, open_file_or_fail, read_buf, FileMode},
         structures::{BackupFile, BackupMetadata, FileBackupMetadata, FolderBackupMetadata},
-        utility::compute_size_variation,
+        utility::{compute_size_variation, replace_recursive},
     },
     byte_size::format_bytesize,
     configuration::{DEFAULT_BUFFER_SIZE, MAX_THREADS},
@@ -96,23 +96,19 @@ async fn process_folder(
     };
 
     for file in files {
-        let filename = file
-            .path
-            .canonicalize()
-            .map_err(|e| BackupError::GeneralError(e.to_string()))?
-            .to_string_lossy()
-            .replace(":", "")
-            .replace("//", "/")
-            .replace("\\", "/")
-            .replace("?", "")
-            .replace("///", "");
+        let mut filename = file.path.to_string_lossy().to_string();
+        filename = replace_recursive(filename, "..", "");
+        filename = replace_recursive(filename, ":", "");
+        filename = replace_recursive(filename, "//", "/");
+        filename = replace_recursive(filename, "/./", "/");
+        filename = replace_recursive(filename, "?", "");
+        filename = replace_recursive(filename, "\\", "/");
 
         let options = zip::write::SimpleFileOptions::default()
             .compression_method(zip::CompressionMethod::Stored)
-            .unix_permissions(0o755)
             .large_file(true);
 
-        zip.start_file(filename, options)
+        zip.start_file(filename.clone(), options)
             .map_err(|e| BackupError::CannotAddZipEntry(e.to_string()))?;
 
         let mut readable_file = make_readable_file(file.path.to_string_lossy().as_ref()).await?;
@@ -143,27 +139,13 @@ async fn process_folder(
             file_id.clone(),
             FileBackupMetadata {
                 id:            file_id,
-                original_path: file.path.to_str().unwrap().to_string(),
+                original_path: filename,
                 size:          file.size,
                 last_updated:  file.last_updated,
                 hash:          file.hash.clone(),
+                duplicates:    file.duplicates,
             },
         );
-
-        // Add the duplicates to the folder metadata
-        for duplicate in file.duplicates {
-            let file_id = create_id();
-            folder_meta.files.insert(
-                file_id.clone(),
-                FileBackupMetadata {
-                    id:            file_id,
-                    original_path: duplicate.to_str().unwrap().to_string(),
-                    size:          0,
-                    last_updated:  file.last_updated,
-                    hash:          file.hash.clone(),
-                },
-            );
-        }
     }
 
     // Finalize the zip archive
