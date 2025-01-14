@@ -11,6 +11,9 @@ pub trait StorageProvider: Display + Send + Sync {
     /// `gitup://<auth-token>:<provider-name>/<provider-dependant-fragments>`
     fn url(&self) -> &str;
 
+    /// Returns the secret URL for the storage provider where the auth token is hidden
+    fn to_secret_url(&self) -> String;
+
     /// Check the connection to the storage provider
     async fn check_connection(&mut self) -> Result<(), ProviderError>;
 
@@ -18,7 +21,28 @@ pub trait StorageProvider: Display + Send + Sync {
     fn clone_box(&self) -> Box<dyn StorageProvider>;
 
     /// Upload the given data to the storage provider at the given path
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to upload the data to
+    /// * `data` - The data to upload
+    ///
+    /// # Returns
+    ///
+    /// `Ok(())` if the upload was successful, an error otherwise
     async fn upload(&self, path: String, data: Arc<Vec<u8>>) -> Result<(), ProviderError>;
+
+    /// Download the data from the storage provider at the given path
+    ///
+    /// # Arguments
+    ///
+    /// * `path` - The path to download the data from
+    /// * `expected_size` - The expected size of the data to download in bytes
+    ///
+    /// # Returns
+    ///
+    /// The downloaded data as a byte vector
+    async fn download(&self, path: String, expected_size: u64) -> Result<Arc<Vec<u8>>, ProviderError>;
 
     /// Get the available space on the storage provider in bytes
     fn get_available_space(&self) -> u64;
@@ -47,7 +71,7 @@ pub trait CreatableStorageProvider: StorageProvider + Default {
     /// # Returns
     ///
     /// A new instance of the storage provider
-    fn new(url: &str) -> Result<Self, ProviderError>
+    fn new(url: &str) -> Result<Box<dyn StorageProvider>, ProviderError>
     where
         Self: Sized;
 

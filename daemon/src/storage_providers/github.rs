@@ -25,6 +25,8 @@ enum RequestEndpoint {
     Meta,
     /// Commit endpoint, upload data to the repository
     Commit,
+    /// Download endpoint, download data from the repository
+    Content,
 }
 
 /// A struct representing useful metadata about a repository (the only one intended to be used)
@@ -47,6 +49,17 @@ pub struct CommitData {
     pub message: String,
     /// The content to commit
     pub content: String,
+}
+
+/// A struct representing the response from the GitHub API when downloading a file
+#[derive(Debug, Deserialize)]
+struct FileGetResponse {
+    /// The content of the file
+    content: String,
+    /// The size of the file
+    size:    u64,
+    /// The path of the file
+    path:    String,
 }
 
 /// GitHub storage provider
@@ -79,6 +92,23 @@ impl Provider {
             .header("X-GitHub-Api-Version", "2022-11-28")
     }
 
+    /// Append headers to a request builder to make a request to the GitHub API for a large file
+    /// (raw content) download
+    ///
+    /// # Arguments
+    ///
+    /// * `req` - The request builder to append headers to
+    ///
+    /// # Returns
+    ///
+    /// The request builder with the headers appended
+    fn prepare_large_file_request_headers(&self, req: RequestBuilder) -> RequestBuilder {
+        req.header("Accept", "application/vnd.github.raw+json")
+            .header("User-Agent", "Gitup daemon")
+            .header("Authorization", format!("Bearer {}", self.pat))
+            .header("X-GitHub-Api-Version", "2022-11-28")
+    }
+
     /// Prepare a request to the GitHub API
     ///
     /// # Arguments
@@ -106,6 +136,14 @@ impl Provider {
                     extra.unwrap().get("path").unwrap()
                 )))
             },
+            RequestEndpoint::Content => {
+                self.prepare_large_file_request_headers(client.get(format!(
+                    "https://api.github.com/repos/{}/{}/contents/{}",
+                    self.owner,
+                    self.repo,
+                    extra.unwrap().get("path").unwrap()
+                )))
+            },
         }
     }
 }
@@ -127,6 +165,8 @@ impl StorageProvider for Provider {
     fn name(&self) -> &'static str { "GitHub" }
 
     fn url(&self) -> &'static str { "gitup://<auth-token>:github/<owner>/<repo>" }
+
+    fn to_secret_url(&self) -> String { format!("gitup://****:github/{}/{}", self.owner, self.repo) }
 
     async fn check_connection(&mut self) -> Result<(), ProviderError> {
         // prepare the request and send it
@@ -194,14 +234,6 @@ impl StorageProvider for Provider {
     async fn upload(&self, path: String, data: Arc<Vec<u8>>) -> Result<(), ProviderError> {
         // check if there's enough space in the repository
 
-        // The following check has been delegated to the backup engine, refer to the comment at the end of
-        // this method to understand why.
-        // if data.len() as u64 > self.available_space {
-        // return Err(ProviderError::PreconditionsFailed(
-        // "Not enough space in the repository".to_owned(),
-        // ));
-        // }
-
         // encode the data in base64 (GitHub requires it)
         let data_size = data.len();
         let data = base64::Encoder::new(base64::Variant::Standard).encode(data.as_slice());
@@ -248,16 +280,73 @@ impl StorageProvider for Provider {
             )));
         }
 
-        // update the available space and return
-
-        // The following line was commented out to avoid deadlocks due to the mutable requirement of self.
-        // Uncommenting this will result in a drastical reduction of the overall performance of the daemon.
-        // self.available_space -= data_size as u64;
         debug!(
             "Uploaded {} bytes to GitHub",
             format_bytesize(data_size as u64)
         );
         Ok(())
+    }
+
+    async fn download(&self, path: String, expected_size: u64) -> Result<Arc<Vec<u8>>, ProviderError> {
+        debug!("Downloading file '{}' from GitHub", path);
+
+        let req = self
+            .make_request(
+                RequestEndpoint::Content,
+                Some(
+                    [("path".to_owned(), path.clone())]
+                        .iter()
+                        .cloned()
+                        .collect(),
+                ),
+            )
+            .send()
+            .await
+            .map_err(|e| ProviderError::ConnectionError(e.to_string()))?;
+
+        if !req.status().is_success() {
+            let status = req.status();
+            debug!(
+                "Failed to download data, the api answered with {:?}",
+                req.text().await.unwrap()
+            );
+            return Err(ProviderError::ConnectionError(format!(
+                "Failed to download data: {}",
+                status
+            )));
+        }
+
+        // let data = req
+        // .json::<FileGetResponse>()
+        // .await
+        // .map_err(|e| ProviderError::GenericError(e.to_string()))?;
+        //
+        // if data.path != path {
+        // return Err(ProviderError::PreconditionsFailed(
+        // "The downloaded file path does not match the requested path".to_owned(),
+        // ));
+        // }
+        // if data.size != expected_size {
+        // return Err(ProviderError::PreconditionsFailed(
+        // "The downloaded file size does not match the expected size".to_owned(),
+        // ));
+        // }
+        //
+        // debug!(
+        // "Downloaded {} bytes from GitHub",
+        // format_bytesize(data.size)
+        // );
+        //
+        // let data = base64::Encoder::new(base64::Variant::Standard)
+        // .decode(data.content.as_str())
+        // .map_err(|e| ProviderError::GenericError(e.to_string()))?;
+
+        Ok(Arc::new(
+            req.bytes()
+                .await
+                .map_err(|e| ProviderError::GenericError(e.to_string()))?
+                .to_vec(),
+        ))
     }
 
     fn get_available_space(&self) -> u64 { self.available_space }
@@ -269,7 +358,7 @@ impl CreatableStorageProvider for Provider {
         rex.is_match(url)
     }
 
-    fn new(url: &str) -> Result<Self, ProviderError> {
+    fn new(url: &str) -> Result<Box<dyn StorageProvider>, ProviderError> {
         let rex = Regex::new(r"gitup://(?P<pat>[^:]+):github/(?P<owner>[^/]+)/(?P<repo>.+)").unwrap();
         let caps = rex.captures(url);
 
@@ -278,11 +367,11 @@ impl CreatableStorageProvider for Provider {
         }
         let caps = caps.unwrap();
 
-        Ok(Self {
+        Ok(Box::new(Self {
             owner:           caps.name("owner").unwrap().as_str().to_string(),
             repo:            caps.name("repo").unwrap().as_str().to_string(),
             pat:             caps.name("pat").unwrap().as_str().to_string(),
             available_space: MAX_REPOSITORY_SIZE,
-        })
+        }))
     }
 }
