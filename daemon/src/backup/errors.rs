@@ -31,6 +31,14 @@ pub enum BackupError {
     InvalidSnapshotFile,
     /// The provider is unknown
     NoMatchingProvider,
+    /// The signature of one of the backup parts is invalid
+    InvalidSignature,
+    /// The stream cannot be decrypted
+    CannotDecrypt(String),
+    /// No key provided
+    NoKeyProvided,
+    /// The key is invalid
+    InvalidKey,
 }
 
 impl Display for BackupError {
@@ -90,6 +98,21 @@ impl Display for BackupError {
                 write!(
                     f,
                     "Cannot proceed with the restore operation: no matching provider found in current configuration"
+                )
+            },
+            BackupError::InvalidSignature => {
+                write!(f, "The signature of one of the backup parts is invalid")
+            },
+            BackupError::CannotDecrypt(e) => {
+                write!(f, "The stream cannot be decrypted: {}", e)
+            },
+            BackupError::NoKeyProvided => {
+                write!(f, "A key is required to decrypt the provided snapshot")
+            },
+            BackupError::InvalidKey => {
+                write!(
+                    f,
+                    "Cannot proceed with the decryption operation, the provided key is invalid"
                 )
             },
         }

@@ -1,12 +1,12 @@
 mod archive;
 mod cleanup;
-pub(crate) mod compression;
-mod encrypt;
-pub(crate) mod errors;
+pub mod compression;
+pub mod encrypt;
+pub mod errors;
 mod estimate;
-pub(crate) mod file;
+pub mod file;
 mod snapshot;
-mod structures;
+pub mod structures;
 mod upload;
 mod upload_checks;
 mod utility;

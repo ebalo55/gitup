@@ -892,6 +892,7 @@ dependencies = [
  "flate2",
  "futures",
  "glob",
+    "hex",
  "hkdf",
  "once_cell",
  "optional_struct",

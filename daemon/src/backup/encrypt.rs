@@ -7,7 +7,7 @@ use chacha20poly1305::{
     KeyInit,
     XChaCha20Poly1305,
 };
-use futures::{future::join_all, stream, StreamExt};
+use futures::{future::join_all, stream, AsyncBufRead, StreamExt};
 use hkdf::Hkdf;
 use sha3::Sha3_512;
 use tokio::{
@@ -30,6 +30,48 @@ use crate::{
     hash::sha3,
 };
 
+/// Derives a key from the provided key and salt
+///
+/// # Arguments
+///
+/// * `key` - The key to derive
+/// * `salt` - The salt to use, if not provided, a random nonce will be generated and assigned
+///
+/// # Returns
+///
+/// The derived key
+pub fn derive_key(key: &str, mut salt: Option<&[u8]>) -> Result<[u8; 32], BackupError> {
+    if salt.is_none() {
+        salt = Some(&*XChaCha20Poly1305::generate_nonce(&mut OsRng));
+    }
+    let salt = salt.unwrap();
+
+    let hkdf = Hkdf::<Sha3_512>::new(Some(salt), key.as_bytes());
+    let mut key = [0u8; 32];
+    hkdf.expand(b"gitup", &mut key)
+        .map_err(|e| BackupError::GeneralError(e.to_string()))?;
+
+    Ok(key)
+}
+
+/// Extracts the key and salt from the hashed key
+///
+/// # Arguments
+///
+/// * `hashed_key` - The hashed key
+///
+/// # Returns
+///
+/// A tuple containing the key and the salt
+pub fn key_parts_from_string(hashed_key: &str) -> (String, Vec<u8>) {
+    let key = &hashed_key[.. 64];
+
+    let salt = &hashed_key[64 ..];
+    let salt = hex::decode(salt).unwrap();
+
+    (key.to_string(), salt)
+}
+
 /// Encrypts the archives using the provided key
 ///
 /// # Arguments
@@ -49,16 +91,14 @@ pub async fn encrypt_archives(
     let now = SystemTime::now();
 
     // Generate the encryption key and nonce
-    let hkdf_salt = XChaCha20Poly1305::generate_nonce(&mut OsRng);
-    let hkdf = Hkdf::<Sha3_512>::new(Some(hkdf_salt.as_slice()), key.as_bytes());
-    let mut key = [0u8; 32];
-    hkdf.expand(b"gitup", &mut key)
-        .map_err(|e| BackupError::GeneralError(e.to_string()))?;
+    let mut hkdf_salt = None;
+    let mut key = derive_key(key, hkdf_salt)?;
+    let hkdf_salt = hkdf_salt.unwrap();
 
     // Hash the key and store it in the metadata
     let mut hash_data = Vec::new();
     hash_data.extend_from_slice(key.as_slice());
-    hash_data.extend_from_slice(hkdf_salt.as_slice());
+    hash_data.extend_from_slice(hkdf_salt);
     let hash = sha3(hash_data.as_slice());
     let salt = format!("{:x}", hkdf_salt);
 
@@ -180,10 +220,57 @@ async fn encrypt(archive: String, key: Arc<[u8; 32]>) -> Result<String, BackupEr
             .map_err(|e| BackupError::CannotEncrypt(e.to_string()))?;
     }
 
+    // flush the writer
+    writer
+        .flush()
+        .await
+        .map_err(|e| BackupError::CannotEncrypt(e.to_string()))?;
+
     // remove the original archive
     remove_file(archive)
         .await
         .map_err(|e| BackupError::GeneralError(e.to_string()))?;
 
     Ok(encrypted_filename)
+}
+
+/// Decrypts the data using the provided key
+///
+/// # Arguments
+///
+/// * `data` - The data to decrypt
+/// * `key` - The encryption key
+///
+/// # Returns
+///
+/// The decrypted data
+pub async fn decrypt(mut data: Arc<Vec<u8>>, key: [u8; 32]) -> Result<Arc<Vec<u8>>, BackupError> {
+    // Create the cipher
+    let mut cipher = XChaCha20Poly1305::new(Key::from_slice(key.as_slice()));
+
+    let mut raw_data = Vec::new();
+
+    // Decrypt the data in chunks
+    loop {
+        // Check if the data is empty
+        if data.is_empty() {
+            break;
+        }
+
+        // Extract the nonce and the ciphertext
+        let nonce = data.drain(.. 24).collect();
+
+        // extract the ciphertext up to the buffer size or the remaining data size
+        let upper_bound = DEFAULT_BUFFER_SIZE.min(data.len() as u64) as usize;
+        let ciphertext: Vec<u8> = data.drain(.. upper_bound).collect();
+
+        // Decrypt the data
+        let plaintext = cipher
+            .decrypt(&nonce, ciphertext.as_slice())
+            .map_err(|e| BackupError::CannotDecrypt(e.to_string()))?;
+
+        raw_data.extend_from_slice(plaintext.as_slice());
+    }
+
+    Ok(Arc::new(raw_data))
 }
